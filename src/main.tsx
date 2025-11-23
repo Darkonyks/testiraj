@@ -2,9 +2,16 @@ import React from 'react'
 import ReactDOM from 'react-dom/client'
 import App from './App.tsx'
 import './index.css'
+import { AuthProvider } from './contexts/AuthContext'
+import { seedDemoUsers } from './utils/seedData'
+
+// Seed demo users
+seedDemoUsers();
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
-    <App />
+    <AuthProvider>
+      <App />
+    </AuthProvider>
   </React.StrictMode>,
 )

@@ -1,85 +1,236 @@
-import { useState } from 'react'
-import { Heart, Code, Sparkles } from 'lucide-react'
+import { useState } from 'react';
+import { UserPlus, Wrench, Users, DollarSign, TrendingUp, UserCircle } from 'lucide-react';
+import { Client, Service } from './types';
+import { useLocalStorage } from './hooks/useLocalStorage';
+import { useAuth } from './contexts/AuthContext';
+import { themes } from './themes';
+import ClientForm from './components/ClientForm';
+import ServiceForm from './components/ServiceForm';
+import ClientCard from './components/ClientCard';
+import ThemeSelector from './components/ThemeSelector';
+import Login from './components/Login';
+import Register from './components/Register';
+import UserProfile from './components/UserProfile';
 
 function App() {
-  const [count, setCount] = useState(0)
+  const { user, isAuthenticated } = useAuth();
+  const [showAuthForm, setShowAuthForm] = useState<'login' | 'register' | null>(null);
+  const [showProfile, setShowProfile] = useState(false);
+  const [clients, setClients] = useLocalStorage<Client[]>('clients', []);
+  const [services, setServices] = useLocalStorage<Service[]>('services', []);
+  const [currentTheme, setCurrentTheme] = useLocalStorage<string>('theme', 'light');
+  const [showClientForm, setShowClientForm] = useState(false);
+  const [showServiceForm, setShowServiceForm] = useState(false);
+  const [selectedClientId, setSelectedClientId] = useState<string | undefined>();
+  const [searchTerm, setSearchTerm] = useState('');
+
+  const theme = themes[currentTheme] || themes.light;
+
+  const handleAddClient = (clientData: Omit<Client, 'id' | 'createdAt' | 'createdBy'>) => {
+    const newClient: Client = {
+      ...clientData,
+      id: crypto.randomUUID(),
+      createdAt: new Date().toISOString(),
+      createdBy: user?.id || 'unknown',
+    };
+    setClients([...clients, newClient]);
+    setShowClientForm(false);
+  };
+
+  const handleAddService = (serviceData: Omit<Service, 'id' | 'createdBy'>) => {
+    const newService: Service = {
+      ...serviceData,
+      id: crypto.randomUUID(),
+      createdBy: user?.id || 'unknown',
+    };
+    setServices([...services, newService]);
+    setShowServiceForm(false);
+    setSelectedClientId(undefined);
+  };
+
+  // Show login if not authenticated
+  if (!isAuthenticated) {
+    if (showAuthForm === 'register') {
+      return <Register onSwitchToLogin={() => setShowAuthForm('login')} />;
+    }
+    return <Login onSwitchToRegister={() => setShowAuthForm('register')} />;
+  }
+
+  const openServiceForm = (clientId?: string) => {
+    setSelectedClientId(clientId);
+    setShowServiceForm(true);
+  };
+
+  const filteredClients = clients.filter((client) =>
+    client.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    client.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    client.phone.includes(searchTerm)
+  );
+
+  const totalRevenue = services.reduce((sum, service) => sum + service.price, 0);
+  const completedServices = services.filter((s) => s.status === 'completed').length;
+  const pendingServices = services.filter((s) => s.status === 'pending').length;
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-purple-500 via-pink-500 to-red-500">
-      <div className="container mx-auto px-4 py-16">
-        <div className="max-w-4xl mx-auto">
-          {/* Header */}
-          <header className="text-center mb-16">
-            <div className="flex justify-center mb-6">
-              <div className="bg-white/10 backdrop-blur-lg rounded-full p-6 shadow-2xl">
-                <Sparkles className="w-16 h-16 text-white" />
+    <div className={`min-h-screen ${theme.colors.background}`}>
+      {/* Header */}
+      <header className={`${theme.colors.cardBg} shadow-md`}>
+        <div className="container mx-auto px-4 py-6">
+          <div className="flex items-center justify-between flex-wrap gap-4">
+            <div className="flex items-center gap-3">
+              <div className={`${theme.colors.primary} p-3 rounded-lg`}>
+                <Wrench className="w-8 h-8 text-white" />
+              </div>
+              <div>
+                <h1 className={`text-3xl font-bold ${theme.colors.text}`}>Servis Manager</h1>
+                <p className={theme.colors.textSecondary}>Evidencija klijenata i servisa računara</p>
               </div>
             </div>
-            <h1 className="text-6xl font-bold text-white mb-4">
-              Dobrodošli
-            </h1>
-            <p className="text-xl text-white/90">
-              Moderna web aplikacija sa React, TypeScript i Tailwind CSS
-            </p>
-          </header>
-
-          {/* Main Content */}
-          <main className="bg-white/10 backdrop-blur-lg rounded-3xl p-8 shadow-2xl mb-8">
-            <div className="text-center mb-8">
-              <h2 className="text-3xl font-bold text-white mb-4">
-                Interaktivni Brojač
-              </h2>
-              <div className="bg-white/20 rounded-2xl p-8 mb-6">
-                <p className="text-6xl font-bold text-white mb-4">{count}</p>
-                <button
-                  onClick={() => setCount(count + 1)}
-                  className="bg-white text-purple-600 px-8 py-4 rounded-xl font-semibold text-lg hover:bg-purple-100 transition-all duration-200 transform hover:scale-105 shadow-lg"
-                >
-                  Klikni me!
-                </button>
-              </div>
+            <div className="flex gap-3 flex-wrap">
               <button
-                onClick={() => setCount(0)}
-                className="text-white/80 hover:text-white underline"
+                onClick={() => setShowProfile(true)}
+                className={`flex items-center gap-2 ${currentTheme === 'dark' || currentTheme === 'ocean' ? 'bg-gray-700 text-gray-200 hover:bg-gray-600' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'} px-4 py-2 rounded-lg font-medium shadow-lg`}
+                title={user?.fullName}
               >
-                Resetuj brojač
+                <UserCircle className="w-5 h-5" />
+                <span className="hidden md:inline">{user?.fullName}</span>
               </button>
+              <ThemeSelector currentTheme={currentTheme} onThemeChange={setCurrentTheme} />
+              {(user?.role === 'admin' || user?.role === 'technician') && (
+                <>
+                  <button
+                    onClick={() => setShowClientForm(true)}
+                    className={`flex items-center gap-2 ${theme.colors.primary} text-white px-6 py-3 rounded-lg ${theme.colors.primaryHover} font-medium shadow-lg`}
+                  >
+                    <UserPlus className="w-5 h-5" />
+                    <span className="hidden sm:inline">Novi Klijent</span>
+                  </button>
+                  <button
+                    onClick={() => openServiceForm()}
+                    className={`flex items-center gap-2 ${theme.colors.secondary} text-white px-6 py-3 rounded-lg ${theme.colors.secondaryHover} font-medium shadow-lg`}
+                  >
+                    <Wrench className="w-5 h-5" />
+                    <span className="hidden sm:inline">Novi Servis</span>
+                  </button>
+                </>
+              )}
             </div>
-          </main>
+          </div>
+        </div>
+      </header>
 
-          {/* Features */}
-          <div className="grid md:grid-cols-2 gap-6">
-            <div className="bg-white/10 backdrop-blur-lg rounded-2xl p-6 shadow-xl">
-              <div className="flex items-center mb-4">
-                <Code className="w-8 h-8 text-white mr-3" />
-                <h3 className="text-2xl font-bold text-white">Moderna Tehnologija</h3>
+      {/* Stats */}
+      <div className="container mx-auto px-4 py-8">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+          <div className={`${theme.colors.cardBg} p-6 rounded-lg shadow-md border ${theme.colors.border}`}>
+            <div className="flex items-center justify-between">
+              <div>
+                <p className={`${theme.colors.textSecondary} text-sm font-medium`}>Ukupno Klijenata</p>
+                <p className={`text-3xl font-bold ${theme.colors.text}`}>{clients.length}</p>
               </div>
-              <p className="text-white/80">
-                React 18, TypeScript, Vite i Tailwind CSS za brz i moderan razvoj
-              </p>
-            </div>
-
-            <div className="bg-white/10 backdrop-blur-lg rounded-2xl p-6 shadow-xl">
-              <div className="flex items-center mb-4">
-                <Heart className="w-8 h-8 text-white mr-3" />
-                <h3 className="text-2xl font-bold text-white">Lako za Korišćenje</h3>
-              </div>
-              <p className="text-white/80">
-                Jednostavna struktura projekta spremna za proširenje i razvoj
-              </p>
+              <Users className={`w-12 h-12 ${currentTheme === 'dark' || currentTheme === 'ocean' ? 'text-blue-400' : 'text-blue-600'}`} />
             </div>
           </div>
 
-          {/* Footer */}
-          <footer className="text-center mt-16">
-            <p className="text-white/60">
-              Započnite razvoj sa <code className="bg-white/20 px-2 py-1 rounded">npm run dev</code>
-            </p>
-          </footer>
+          <div className={`${theme.colors.cardBg} p-6 rounded-lg shadow-md border ${theme.colors.border}`}>
+            <div className="flex items-center justify-between">
+              <div>
+                <p className={`${theme.colors.textSecondary} text-sm font-medium`}>Ukupno Servisa</p>
+                <p className={`text-3xl font-bold ${theme.colors.text}`}>{services.length}</p>
+              </div>
+              <Wrench className={`w-12 h-12 ${currentTheme === 'dark' || currentTheme === 'ocean' ? 'text-green-400' : 'text-green-600'}`} />
+            </div>
+          </div>
+
+          <div className={`${theme.colors.cardBg} p-6 rounded-lg shadow-md border ${theme.colors.border}`}>
+            <div className="flex items-center justify-between">
+              <div>
+                <p className={`${theme.colors.textSecondary} text-sm font-medium`}>Ukupna Zarada</p>
+                <p className={`text-2xl font-bold ${theme.colors.text}`}>
+                  {totalRevenue.toLocaleString('sr-RS')} RSD
+                </p>
+              </div>
+              <DollarSign className={`w-12 h-12 ${currentTheme === 'dark' || currentTheme === 'ocean' ? 'text-yellow-400' : 'text-yellow-600'}`} />
+            </div>
+          </div>
+
+          <div className={`${theme.colors.cardBg} p-6 rounded-lg shadow-md border ${theme.colors.border}`}>
+            <div className="flex items-center justify-between">
+              <div>
+                <p className={`${theme.colors.textSecondary} text-sm font-medium`}>Završeno / Na čekanju</p>
+                <p className={`text-3xl font-bold ${theme.colors.text}`}>
+                  {completedServices} / {pendingServices}
+                </p>
+              </div>
+              <TrendingUp className={`w-12 h-12 ${currentTheme === 'dark' || currentTheme === 'ocean' ? 'text-purple-400' : 'text-purple-600'}`} />
+            </div>
+          </div>
         </div>
+
+        {/* Search */}
+        <div className="mb-6">
+          <input
+            type="text"
+            placeholder="Pretraži klijente po imenu, email-u ili telefonu..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className={`w-full px-4 py-3 border ${theme.colors.border} ${theme.colors.cardBg} ${theme.colors.text} rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent shadow-sm`}
+          />
+        </div>
+
+        {/* Clients List */}
+        {filteredClients.length === 0 ? (
+          <div className={`${theme.colors.cardBg} rounded-lg shadow-md p-12 text-center border ${theme.colors.border}`}>
+            <Users className={`w-16 h-16 ${theme.colors.textSecondary} mx-auto mb-4 opacity-50`} />
+            <h3 className={`text-xl font-semibold ${theme.colors.text} mb-2`}>
+              {searchTerm ? 'Nema rezultata' : 'Nema klijenata'}
+            </h3>
+            <p className={`${theme.colors.textSecondary} mb-6`}>
+              {searchTerm
+                ? 'Pokušajte sa drugačijim pojmom za pretragu'
+                : 'Dodajte prvog klijenta da biste počeli'}
+            </p>
+            {!searchTerm && (
+              <button
+                onClick={() => setShowClientForm(true)}
+                className={`${theme.colors.primary} text-white px-6 py-3 rounded-lg ${theme.colors.primaryHover} font-medium`}
+              >
+                Dodaj Prvog Klijenta
+              </button>
+            )}
+          </div>
+        ) : (
+          <div className="space-y-6">
+            {filteredClients.map((client) => (
+              <ClientCard
+                key={client.id}
+                client={client}
+                services={services}
+                onAddService={openServiceForm}
+              />
+            ))}
+          </div>
+        )}
       </div>
+
+      {/* Modals */}
+      {showProfile && <UserProfile onClose={() => setShowProfile(false)} />}
+      {showClientForm && (
+        <ClientForm onSubmit={handleAddClient} onClose={() => setShowClientForm(false)} />
+      )}
+      {showServiceForm && (
+        <ServiceForm
+          clients={clients}
+          onSubmit={handleAddService}
+          onClose={() => {
+            setShowServiceForm(false);
+            setSelectedClientId(undefined);
+          }}
+          preselectedClientId={selectedClientId}
+        />
+      )}
     </div>
-  )
+  );
 }
 
-export default App
+export default App;
